@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local AI Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #FFFFFF;
+            color: #111827;
+        }
+        
+        .glass-panel {
+            background: #ffffff;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        }
+
+        .drop-zone.active {
+            border-color: #2563eb;
+            background: rgba(37, 99, 235, 0.08);
+        }
+
+        /* Custom Scrollbar for Terminal and Chat */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.24); border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.4); }
+
+        .terminal-text { font-family: 'Courier New', Courier, monospace; }
+        
+        @keyframes typing {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        .dot-flashing { animation: typing 1.4s infinite; }
+        .dot-flashing:nth-child(2) { animation-delay: 0.2s; }
+        .dot-flashing:nth-child(3) { animation-delay: 0.4s; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex justify-center items-start antialiased">
+
+    <div class="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 h-[85vh]">
+        
+        <div class="col-span-1 lg:col-span-5 flex flex-col gap-6 h-full">
+            
+            <div class="glass-panel rounded-2xl p-6 shadow-xl flex-shrink-0">
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Ingest
+                </h2>
+                
+                <div id="drop-zone" class="drop-zone border border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer transition-all hover:border-sky-500 bg-slate-50">
+                    <input type="file" id="file-input" class="hidden" multiple accept=".txt,.pdf,.xml,.py,.json">
+                    <p class="text-sm font-medium text-slate-600">Drag files or click to browse</p>
+                </div>
+
+                <div id="file-list" class="mt-4 space-y-2 max-h-24 overflow-y-auto"></div>
+
+                <button id="upload-btn" disabled class="mt-4 w-full bg-slate-900 disabled:opacity-50 text-white font-semibold py-2 rounded-lg transition-colors hover:bg-slate-800">
+                    Start Pipeline
+                </button>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-6 shadow-xl flex-grow flex flex-col min-h-0">
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Logs
+                </h2>
+                <div class="bg-[#050505] rounded-xl p-4 flex-grow overflow-y-auto border border-slate-800 shadow-inner">
+                    <div id="terminal-output" class="terminal-text text-xs text-emerald-400 space-y-1">
+                        <p class="text-slate-500">System idle. Waiting for data ingestion...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-1 lg:col-span-7 glass-panel rounded-2xl shadow-xl flex flex-col h-full">
+            <div class="p-6 border-b border-slate-700/50 flex items-center justify-between">
+                <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5"></path></svg>
+                    Chat
+                </h2>
+                <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">Model Ready</span>
+            </div>
+
+            <div id="chat-messages" class="flex-grow p-6 overflow-y-auto flex flex-col gap-4">
+                <div class="flex gap-4">
+                    <div class="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0 text-sky-400 font-bold border border-sky-500/30">AI</div>
+                    <div class="bg-slate-50 rounded-2xl rounded-tl-none p-4 text-sm text-slate-800 max-w-[80%]">
+                        Hello. I am your local AI. Upload your context on the left, and ask me questions about it here.
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-slate-700/50">
+                <form id="chat-form" class="relative">
+                    <input type="text" id="chat-input" autocomplete="off" placeholder="Query your data..." class="w-full bg-slate-50 border border-slate-300 rounded-xl py-3 pl-4 pr-12 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+                    <button type="submit" class="absolute right-2 top-1.5 bottom-1.5 p-2 bg-sky-500 hover:bg-sky-400 rounded-lg text-white transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- INGESTION & TERMINAL LOGIC ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const uploadBtn = document.getElementById('upload-btn');
+        const terminalOutput = document.getElementById('terminal-output');
+        let files = [];
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, preventDefaults, false));
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, () => dropZone.classList.add('active'), false));
+        ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, () => dropZone.classList.remove('active'), false));
+        dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+        fileInput.addEventListener('change', function() { handleFiles(this.files); });
+
+        function handleFiles(newFiles) {
+            files = [...files, ...Array.from(newFiles)];
+            updateFileList();
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = files.map((f, i) => `
+                <div class="flex justify-between items-center text-xs bg-slate-100 p-2 rounded">
+                    <span class="text-slate-700 truncate pr-2">${f.name}</span>
+                    <button onclick="removeFile(${i})" class="text-red-500 hover:text-red-600">✕</button>
+                </div>
+            `).join('');
+            
+            if(files.length > 0) {
+                uploadBtn.removeAttribute('disabled');
+                uploadBtn.classList.remove('bg-slate-900');
+                uploadBtn.classList.add('bg-sky-600');
+                uploadBtn.classList.add('hover:bg-sky-500');
+            } else {
+                uploadBtn.setAttribute('disabled', 'true');
+                uploadBtn.classList.remove('bg-sky-600');
+                uploadBtn.classList.remove('hover:bg-sky-500');
+                uploadBtn.classList.add('bg-slate-900');
+            }
+        }
+
+        function removeFile(index) { files.splice(index, 1); updateFileList(); }
+
+        function logToTerminal(message, type = 'info') {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            let colorClass = 'text-slate-300';
+            if(type === 'success') colorClass = 'text-emerald-400';
+            if(type === 'process') colorClass = 'text-sky-400';
+            if(type === 'warn') colorClass = 'text-amber-400';
+            
+            terminalOutput.innerHTML += `<div class="${colorClass}">[${time}] ${message}</div>`;
+            terminalOutput.parentElement.scrollTop = terminalOutput.parentElement.scrollHeight;
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+            if(files.length === 0) return;
+            uploadBtn.setAttribute('disabled', 'true');
+            uploadBtn.innerHTML = 'Processing...';
+            terminalOutput.innerHTML = ''; 
+
+            logToTerminal(`Uploading ${files.length} files to Python backend...`, 'process');
+
+            // Create a FormData object to send the files
+            const formData = new FormData();
+            files.forEach(file => formData.append('files', file));
+
+            try {
+                // Send to FastAPI
+                const response = await fetch('http://localhost:8000/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if(data.status === 'success') {
+                    data.logs.forEach(log => logToTerminal(log, 'success'));
+                    uploadBtn.innerHTML = 'Start Pipeline';
+                    files = [];
+                    updateFileList();
+                }
+            } catch (error) {
+                logToTerminal(`Upload failed: ${error.message}`, 'warn');
+                uploadBtn.removeAttribute('disabled');
+                uploadBtn.innerHTML = 'Retry Pipeline';
+            }
+        });
+
+        // --- CHAT LOGIC ---
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        function appendMessage(sender, text) {
+            const isUser = sender === 'User';
+            const html = `
+                <div class="flex gap-4 ${isUser ? 'flex-row-reverse' : ''} animate-fade-in-up">
+                    
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs
+                        ${isUser ? 'bg-slate-900/10 text-slate-900' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'}">
+                        ${isUser ? 'U' : 'AI'}
+                    </div>
+                    
+                    <div class="bg-slate-50 rounded-2xl ${isUser ? 'rounded-tr-none' : 'rounded-tl-none'} p-4 text-sm text-slate-800 max-w-[80%] whitespace-pre-wrap selection:bg-slate-200">${text.trim()}</div>
+                    
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', html);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const html = `
+                <div id="typing-indicator" class="flex gap-4 animate-fade-in-up">
+                    <div class="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0 text-sky-400 font-bold border border-sky-500/30">AI</div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-none p-4 flex gap-1 items-center">
+                        <div class="w-2 h-2 bg-sky-400 rounded-full dot-flashing"></div>
+                        <div class="w-2 h-2 bg-sky-400 rounded-full dot-flashing"></div>
+                        <div class="w-2 h-2 bg-sky-400 rounded-full dot-flashing"></div>
+                    </div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', html);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('typing-indicator');
+            if(el) el.remove();
+        }
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if(!text) return;
+
+            appendMessage('User', text);
+            chatInput.value = '';
+            showTypingIndicator();
+
+            try {
+                // Send to FastAPI
+                const response = await fetch('http://localhost:8000/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                
+                const data = await response.json();
+                removeTypingIndicator();
+                appendMessage('AI', data.response); // Print real LLM response
+                
+            } catch (error) {
+                removeTypingIndicator();
+                appendMessage('AI', 'Error connecting to the local server. Is FastAPI running?');
+            }
+        });
+    </script>
+</body>
+</html>

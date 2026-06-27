@@ -1,0 +1,18 @@
+# Web Framework & Server
+fastapi
+uvicorn
+python-multipart
+
+# LangChain Core & DB Orchestration
+langchain
+langchain-community
+langchain-chroma
+chromadb
+
+# Local AI Engine (LLM & Embeddings)
+langchain-ollama
+
+# Document Parsing & Environment
+beautifulsoup4
+pypdf
+python-dotenv
