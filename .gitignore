@@ -12,3 +12,4 @@ wheels/
 .python-version
 pyproject.toml
 uv.lock
+src/RAG_langchain_CDB.py

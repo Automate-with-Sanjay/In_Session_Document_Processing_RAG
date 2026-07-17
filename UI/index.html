@@ -59,7 +59,7 @@
 
                 <div id="file-list" class="mt-4 space-y-2 max-h-24 overflow-y-auto"></div>
 
-                <button id="upload-btn" disabled class="mt-4 w-full bg-slate-900 disabled:opacity-50 text-white font-semibold py-2 rounded-lg transition-colors hover:bg-slate-800">
+                <button id="upload-btn" type="button" disabled class="mt-4 w-full bg-slate-900 disabled:opacity-50 text-white font-semibold py-2 rounded-lg transition-colors hover:bg-slate-800">
                     Start Pipeline
                 </button>
             </div>
@@ -106,8 +106,15 @@
         </div>
 
     </div>
-
     <script>
+        // --- SESSION MANAGEMENT ---
+        let sessionId = localStorage.getItem("session_id");
+        if (!sessionId) {
+            sessionId = crypto.randomUUID();
+            localStorage.setItem("session_id", sessionId);
+        }
+        console.log("Session ID:", sessionId);
+
         // --- INGESTION & TERMINAL LOGIC ---
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
@@ -115,6 +122,7 @@
         const uploadBtn = document.getElementById('upload-btn');
         const terminalOutput = document.getElementById('terminal-output');
         let files = [];
+        let logEventSource = null;
 
         dropZone.addEventListener('click', () => fileInput.click());
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, preventDefaults, false));
@@ -133,69 +141,159 @@
             fileList.innerHTML = files.map((f, i) => `
                 <div class="flex justify-between items-center text-xs bg-slate-100 p-2 rounded">
                     <span class="text-slate-700 truncate pr-2">${f.name}</span>
-                    <button onclick="removeFile(${i})" class="text-red-500 hover:text-red-600">✕</button>
+                    <button type="button" onclick="removeFile(${i})" class="text-red-500 hover:text-red-600">✕</button>
                 </div>
             `).join('');
             
             if(files.length > 0) {
                 uploadBtn.removeAttribute('disabled');
                 uploadBtn.classList.remove('bg-slate-900');
-                uploadBtn.classList.add('bg-sky-600');
-                uploadBtn.classList.add('hover:bg-sky-500');
+                uploadBtn.classList.add('bg-sky-600', 'hover:bg-sky-500');
             } else {
                 uploadBtn.setAttribute('disabled', 'true');
-                uploadBtn.classList.remove('bg-sky-600');
-                uploadBtn.classList.remove('hover:bg-sky-500');
+                uploadBtn.classList.remove('bg-sky-600', 'hover:bg-sky-500');
                 uploadBtn.classList.add('bg-slate-900');
             }
         }
 
-        function removeFile(index) { files.splice(index, 1); updateFileList(); }
-
-        function logToTerminal(message, type = 'info') {
-            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-            let colorClass = 'text-slate-300';
-            if(type === 'success') colorClass = 'text-emerald-400';
-            if(type === 'process') colorClass = 'text-sky-400';
-            if(type === 'warn') colorClass = 'text-amber-400';
-            
-            terminalOutput.innerHTML += `<div class="${colorClass}">[${time}] ${message}</div>`;
-            terminalOutput.parentElement.scrollTop = terminalOutput.parentElement.scrollHeight;
+        function removeFile(index) { 
+            files.splice(index, 1); 
+            updateFileList(); 
         }
 
-        uploadBtn.addEventListener('click', async () => {
+        // --- GLOBAL LOG TO TERMINAL FUNCTION ---
+        function logToTerminal(message, level = "INFO") {
+            // Remove the idle fallback text placeholder on the very first real log
+            const idlePlaceholder = terminalOutput.querySelector('.text-slate-500');
+            if (idlePlaceholder) {
+                idlePlaceholder.remove();
+            }
+
+            const line = document.createElement("div");
+            const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+            let color = "";
+
+            switch(level.toUpperCase()){
+                case "INFO":
+                case "PROCESS":
+                    color = "text-sky-400";
+                    break;
+                case "SUCCESS":
+                    color = "text-emerald-400";
+                    break;
+                case "WARNING":
+                case "WARN":
+                    color = "text-yellow-400";
+                    break;
+                case "ERROR":
+                    color = "text-red-500";
+                    break;
+                default:
+                    color = "text-slate-300";
+            }
+
+            line.className = color;
+            line.textContent = `[${time}] ${level.toUpperCase().padEnd(8)} ${message}`;
+            
+            // Append sequentially so old items are preserved
+            terminalOutput.appendChild(line);
+            
+            // Auto-scroll logic inside container
+            setTimeout(() => {
+                terminalOutput.parentElement.scrollTop = terminalOutput.parentElement.scrollHeight;
+            }, 50);
+        }
+
+        function connectLogStream() {
+            return new Promise((resolve) => {
+                if (logEventSource) {
+                    logEventSource.close();
+                }
+
+                logEventSource = new EventSource(`http://localhost:8000/logs/stream?session_id=${sessionId}`);
+
+                logEventSource.onopen = () => {
+                    logToTerminal("Connected to live backend log stream.", "INFO");
+                    resolve();
+                };
+
+                logEventSource.onmessage = (event) => {
+                    try {
+                        const payload = JSON.parse(event.data);
+                        logToTerminal(payload.message, payload.level || "INFO");
+                    } catch (err) {
+                        // Fallback if data is raw text rather than JSON structured
+                        logToTerminal(event.data, "INFO");
+                    }
+                };
+
+                logEventSource.onerror = () => {
+                    // Closed gracefully or disconnected silently by streaming timeout
+                    closeLogStream();
+                };
+            });
+        }
+
+        function closeLogStream() {
+            if (logEventSource) {
+                logEventSource.close();
+                logEventSource = null;
+            }
+        }
+
+        uploadBtn.addEventListener('click', async (e) => {
+            e.preventDefault(); // Lock down accidental form submissions
             if(files.length === 0) return;
+            
             uploadBtn.setAttribute('disabled', 'true');
             uploadBtn.innerHTML = 'Processing...';
-            terminalOutput.innerHTML = ''; 
+            
+            logToTerminal("--------------------------------", "INFO");
+            logToTerminal("Starting new pipeline...", "INFO");
+            logToTerminal(`Uploading ${files.length} files to Python backend...`, 'PROCESS');
+            
+            await connectLogStream();
 
-            logToTerminal(`Uploading ${files.length} files to Python backend...`, 'process');
+            const formData = new FormData();                    
+            formData.append("session_id", sessionId);
+            formData.append("file", files[0]);
 
-            // Create a FormData object to send the files
-            const formData = new FormData();
-            files.forEach(file => formData.append('files', file));
-
-            try {
-                // Send to FastAPI
-                const response = await fetch('http://localhost:8000/upload', {
-                    method: 'POST',
-                    body: formData
-                });
+         try {
+            const response = await fetch('http://localhost:8000/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if(data.status === 'success') {
+                // --- CHANGED: Removed the data.logs.forEach loop from here ---
+                // Since EventSource already printed them live, we don't repeat them!
                 
-                const data = await response.json();
-                
-                if(data.status === 'success') {
-                    data.logs.forEach(log => logToTerminal(log, 'success'));
-                    uploadBtn.innerHTML = 'Start Pipeline';
-                    files = [];
-                    updateFileList();
+                logToTerminal("Pipeline execution verified successfully.", "SUCCESS");
+                uploadBtn.innerHTML = 'Start Pipeline';
+                files = [];
+                updateFileList();
+            } else {
+                // If it failed, print the error logs so we know what went wrong
+                if (data.logs && Array.isArray(data.logs)) {
+                    data.logs.forEach(log => {
+                        const logStr = typeof log === 'object' ? (log.message || JSON.stringify(log)) : String(log);
+                        logToTerminal(logStr, 'WARN');
+                    });
                 }
-            } catch (error) {
-                logToTerminal(`Upload failed: ${error.message}`, 'warn');
+                logToTerminal(data.message || "Pipeline execution failed.", 'ERROR');
                 uploadBtn.removeAttribute('disabled');
                 uploadBtn.innerHTML = 'Retry Pipeline';
             }
-        });
+        } catch (error) {
+            logToTerminal(`Upload failed: ${error.message}`, 'ERROR');
+            uploadBtn.removeAttribute('disabled');
+            uploadBtn.innerHTML = 'Retry Pipeline';
+        } finally {
+            // Clean up the SSE stream connection once the pipeline is completed
+            closeLogStream();
+        }});
 
         // --- CHAT LOGIC ---
         const chatForm = document.getElementById('chat-form');
@@ -206,14 +304,11 @@
             const isUser = sender === 'User';
             const html = `
                 <div class="flex gap-4 ${isUser ? 'flex-row-reverse' : ''} animate-fade-in-up">
-                    
                     <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs
                         ${isUser ? 'bg-slate-900/10 text-slate-900' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'}">
                         ${isUser ? 'U' : 'AI'}
                     </div>
-                    
                     <div class="bg-slate-50 rounded-2xl ${isUser ? 'rounded-tr-none' : 'rounded-tl-none'} p-4 text-sm text-slate-800 max-w-[80%] whitespace-pre-wrap selection:bg-slate-200">${text.trim()}</div>
-                    
                 </div>
             `;
             chatMessages.insertAdjacentHTML('beforeend', html);
@@ -250,16 +345,24 @@
             showTypingIndicator();
 
             try {
-                // Send to FastAPI
-                const response = await fetch('http://localhost:8000/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
+                const formData = new FormData();                
+                formData.append("session_id", sessionId);
+                formData.append("question", text);
+
+                const response = await fetch("http://localhost:8000/chat", {
+                    method: "POST",
+                    body: formData
                 });
                 
                 const data = await response.json();
                 removeTypingIndicator();
-                appendMessage('AI', data.response); // Print real LLM response
+
+                if (data.status !== "success") {
+                    appendMessage("AI", data.message || "The backend returned an error.");
+                    return;
+                }
+
+                appendMessage("AI", data.answer || "No answer returned.");
                 
             } catch (error) {
                 removeTypingIndicator();

@@ -85,7 +85,9 @@ def format_docs(docs):
 
 # 7. Construct the RAG Chain
 rag_chain = (
-    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+    {"context": retriever | format_docs, 
+     "question": RunnablePassthrough()
+     }
     | prompt
     | llm
     | StrOutputParser()

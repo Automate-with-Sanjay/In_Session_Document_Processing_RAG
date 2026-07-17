@@ -9,10 +9,14 @@ langchain-community
 langchain-chroma
 chromadb
 
-# Local AI Engine (LLM & Embeddings)
-langchain-ollama
+# # Local AI Engine (LLM & Embeddings)
+# langchain-ollama
+
+## Google Generative AI (LLM & Embeddings)
+langchain-google-genai
 
 # Document Parsing & Environment
 beautifulsoup4
 pypdf
 python-dotenv
+
