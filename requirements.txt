@@ -1,22 +1,11 @@
-# Web Framework & Server
-fastapi
-uvicorn
-python-multipart
-
-# LangChain Core & DB Orchestration
-langchain
-langchain-community
-langchain-chroma
-chromadb
-
-# # Local AI Engine (LLM & Embeddings)
-# langchain-ollama
-
-## Google Generative AI (LLM & Embeddings)
-langchain-google-genai
-
-# Document Parsing & Environment
-beautifulsoup4
-pypdf
-python-dotenv
-
+﻿fastapi>=0.138.1
+uvicorn>=0.49.0
+python-multipart>=0.0.32
+python-dotenv>=1.2.2
+langchain>=1.3.11
+langchain-community>=0.4.2
+langchain-chroma>=1.1.0
+langchain-google-genai>=4.2.6
+langchain-text-splitters>=1.1.2
+chromadb>=1.5.9
+nemoguardrails>=0.23.0
