@@ -16,8 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from src.ingest import process_and_vectorize
-from src.query import answer_user_question
-# from src.query_guardrails import generate_guarded_response
+from src.query_guardrails import generate_guarded_response
 from src.logger import PipelineLogger
 DATA_DIR = Path(os.getenv("DATA_DIR", "./data")).resolve()
 
@@ -108,10 +107,15 @@ async def upload_file(session_id: str = Form(...), file: UploadFile = File(...))
 
 @app.post("/chat")
 async def chat(session_id: str = Form(...), question: str = Form(...)):
-    try:
-        ### Use the answer_user_question function to run the pipeline without Guardrails
-        answer = answer_user_question(question, session_id)
+    print (f"Received question: {question} for session_id: {session_id}")
+    if not question or not question.strip():
+        return {"status": "error", "message": "Question cannot be empty."}
 
+    if len(question.strip()) > 2000:
+        return {"status": "error", "message": "Question is too long; please shorten it."}
+
+    try:
+        answer = await generate_guarded_response(question, session_id)
         return {"status": "success", "answer": answer}
     except Exception as e:
         return {"status": "error", "message": str(e)}
